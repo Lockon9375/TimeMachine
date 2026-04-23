@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN" translate="no" class="notranslate">
+<head>
+    <meta charset="UTF-8">
+    <meta name="google" content="notranslate">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GenAI-Expert | Diagnostic Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root { --p-cyan: #00e5ff; --p-pink: #ff007f; --p-yellow: #ffea00; --bg: #050505; }
+        body {
+            background-color: var(--bg); color: #e2e8f0; font-family: 'Noto Sans SC', sans-serif;
+            background-image: linear-gradient(rgba(0, 229, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 229, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px; user-select: none; overflow-x: hidden;
+        }
+        
+        /* 纯英文字体类 - 仅用于数字和英文标识 */
+        .cyber-font { font-family: 'Orbitron', sans-serif; letter-spacing: 1px; }
+        
+        /* 全局中文加粗类 - 保持现代感 */
+        .cn-bold { font-family: 'Noto Sans SC', sans-serif; font-weight: 700; letter-spacing: 0.5px; }
+
+        .crt-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.04));
+            background-size: 100% 2px, 3px 100%; pointer-events: none; z-index: 50;
+        }
+
+        /* 现代赛博发光边框 */
+        .cyber-panel {
+            background: rgba(10, 10, 12, 0.85); border: 1px solid #222; margin: 4px; position: relative;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+        }
+        .cyber-panel::before {
+            content: ''; position: absolute; top: -1px; left: -1px; width: 20px; height: 20px;
+            border-top: 2px solid var(--p-cyan); border-left: 2px solid var(--p-cyan);
+        }
+        .cyber-panel::after {
+            content: ''; position: absolute; bottom: -1px; right: -1px; width: 20px; height: 20px;
+            border-bottom: 2px solid var(--p-pink); border-right: 2px solid var(--p-pink);
+        }
+
+        .option-box {
+            border: 1px solid #333; padding: 16px; margin-bottom: 12px; cursor: pointer; position: relative; 
+            transition: all 0.2s ease; background: rgba(20,20,25,0.7); border-left: 3px solid #444;
+        }
+        .option-box:active { transform: scale(0.98); }
+        .option-box:hover { border-left-color: var(--p-cyan); background: rgba(0, 229, 255, 0.05); transform: translateX(4px); }
+
+        .btn { 
+            background: transparent; border: 1px solid var(--p-pink); color: var(--p-pink); padding: 14px; 
+            cursor: pointer; position: relative; transition: all 0.2s; text-transform: uppercase;
+        }
+        .btn:hover { background: var(--p-pink); color: #fff; box-shadow: 0 0 15px rgba(255,0,127,0.4); }
+        .btn:active { transform: translateY(2px); }
+
+        .btn-cyan { border-color: var(--p-cyan); color: var(--p-cyan); }
+        .btn-cyan:hover { background: var(--p-cyan); color: #000; box-shadow: 0 0 15px rgba(0,229,255,0.4); }
+
+        .exp-pop {
+            position: fixed; color: var(--p-yellow); font-family: 'Orbitron'; font-size: 14px; font-weight: bold;
+            pointer-events: none; animation: floatUp 0.8s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; z-index: 100; text-shadow: 0 0 5px #000;
+        }
+        @keyframes floatUp { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-50px) scale(1.3); opacity: 0; } }
+        
+        .shake { animation: shakeAnim 0.2s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shakeAnim { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-3px, 0, 0); } 40%, 60% { transform: translate3d(3px, 0, 0); } }
+
+        #boot-screen {
+            position: fixed; inset: 0; background: #050505; z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer;
+        }
+        .hide { display: none !important; }
+
+        .disclaimer {
+            position: fixed; bottom: 8px; right: 12px; font-size: 10px; color: rgba(255, 255, 255, 0.25);
+            text-align: right; line-height: 1.6; z-index: 999; pointer-events: none;
+            text-shadow: 1px 1px 0 #000; font-family: 'Noto Sans SC', sans-serif;
+        }
+        .disclaimer span { color: rgba(0, 229, 255, 0.5); }
+        
+        .type-out-container {
+            min-height: 180px; padding: 10px 10px 10px 0; font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="crt-overlay" id="crt"></div>
+
+    <div class="disclaimer">
+        * FOR ACADEMIC USE ONLY<br>
+        * 仅供天津师范大学 <span>“AI+X”大赛</span> 演示评测<br>
+        * 本平台为非商业用途 (Non-commercial)<br>
+        * 量表题库来源于公开文献，如有侵权请联系开发者删除
+    </div>
+
+    <div id="boot-screen" onclick="hideBoot()">
+        <div class="w-full max-w-2xl px-6">
+            <p class="cyber-font text-xs text-green-500 leading-loose mb-8 tracking-wider">
+                > INITIALIZING SYSTEM CORE... [OK]<br>
+                > LOADING AKSTE_LITERACY_MATRIX (25 ITEMS)... [OK]<br>
+                > LOADING BEHAVIOR_PROTOCOL (22 ITEMS)... [OK]<br>
+                > CONNECTING TO NEURAL NETWORK...<br>
+                <span class="animate-pulse text-[var(--p-cyan)]">> READY FOR SYSTEM DIAGNOSTICS.</span>
+            </p>
+            <div class="text-center animate-pulse mt-12 cyber-font text-sm text-[var(--p-cyan)] border border-[var(--p-cyan)] p-4 cursor-pointer hover:bg-[var(--p-cyan)] hover:text-black transition-colors">
+                [ CLICK TO START ]
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto p-4 md:p-8 pt-12 pb-24" id="main-app">
+        
+        <header class="mb-10 text-center">
+            <h1 class="text-4xl md:text-5xl cyber-font text-white tracking-widest mb-4"><span style="color: var(--p-cyan)">GENAI</span><span translate="no" class="notranslate" style="color: var(--p-pink)">-EXPERT</span></h1>
+            <p class="text-xs cyber-font text-gray-500 tracking-[0.2em]">DIAGNOSTIC ENGINE</p>
+        </header>
+
+        <section id="dashboard" class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div onclick="startLevel('academic', event)" class="cyber-panel p-8 cursor-pointer group hover:border-[var(--p-cyan)] transition-colors">
+                <h2 class="cyber-font text-lg mb-4 text-[var(--p-cyan)]">STAGE 1: LITERACY</h2>
+                <p class="text-sm text-gray-400 mb-8 leading-relaxed font-normal">25道核心代表题。纯粹基于 AKSTE 模型，精准扫描您的 AI 知识建构、技能实操与思维防线。</p>
+                <div class="h-1 w-full bg-gray-800"><div class="h-full bg-[var(--p-cyan)] w-1/3"></div></div>
+                <div class="text-right text-[10px] cyber-font text-gray-500 mt-3">AKSTE PURE MODE</div>
+            </div>
+
+            <div onclick="startLevel('fun', event)" class="cyber-panel p-8 cursor-pointer group border-[var(--p-pink)] hover:shadow-[0_0_20px_rgba(255,0,127,0.2)] transition-all">
+                <h2 class="cyber-font text-lg mb-4 text-[var(--p-pink)]">STAGE 2: PERSONA_ARENA</h2>
+                <p class="text-sm text-gray-400 mb-8 leading-relaxed font-normal">22道情境电车难题。在极端场景中逼出您的真实信任偏好，揭晓您的专属“赛博协作人格”。</p>
+                <div class="h-1 w-full bg-gray-800"><div class="h-full bg-[var(--p-pink)] w-full animate-pulse"></div></div>
+                <div class="text-right text-[10px] cyber-font text-[var(--p-pink)] mt-3">CYBER PERSONA SCAN</div>
+            </div>
+        </section>
+
+        <section id="engine" class="hide cyber-panel p-6 md:p-10 relative">
+            <div class="flex justify-between items-center mb-6 border-b border-[#333] pb-4">
+                <span id="module-tag" class="cn-bold text-xs bg-[#222] text-[var(--p-cyan)] px-3 py-1 rounded-sm tracking-widest">MODULE</span>
+                <span class="cyber-font text-xs text-[var(--p-yellow)]">EXP: <span id="exp-val">0000</span></span>
+            </div>
+            
+            <div class="h-2 w-full bg-gray-800 mb-8 overflow-hidden rounded-full">
+                <div id="p-bar" class="h-full bg-gradient-to-r from-[var(--p-cyan)] to-[var(--p-pink)] transition-all duration-300" style="width: 0%"></div>
+            </div>
+            
+            <div class="flex justify-between text-[10px] cyber-font text-gray-500 mb-6 uppercase tracking-wider">
+                <span>ITEM_ID: <span id="q-idx" class="text-white">01</span></span>
+                <span class="text-[var(--p-cyan)] animate-pulse">STATUS: ENGAGED</span>
+            </div>
+
+            <h2 id="q-title" class="text-xl md:text-2xl font-bold leading-relaxed mb-10 min-h-[100px] text-gray-100 tracking-wide">...</h2>
+            
+            <div id="options-list" class="flex flex-col gap-3"></div>
+        </section>
+
+        <section id="report" class="hide space-y-8">
+            <div id="capture-area" class="cyber-panel p-8 md:p-10 relative overflow-hidden">
+                <div class="absolute top-4 right-4 cyber-font text-[8px] text-gray-600 tracking-widest">TJNU_AI+X</div>
+                
+                <h1 class="cyber-font text-2xl text-center mb-10 text-white border-b border-[#333] pb-6 tracking-widest">YOUR_DIGITAL_DNA</h1>
+                
+                <div class="flex flex-col md:flex-row gap-10 items-start">
+                    <div class="w-full md:w-5/12 p-4 bg-[#0a0a0c] border border-[#222] rounded-lg shadow-inner">
+                        <canvas id="main-chart"></canvas>
+                    </div>
+                    
+                    <div class="w-full md:w-7/12">
+                        <div class="cyber-font text-[10px] text-[var(--p-cyan)] mb-2 tracking-widest">> ASSIGNED_CLASS:</div>
+                        <h2 id="persona-name" class="text-3xl lg:text-4xl cn-bold text-[var(--p-pink)] mb-6 drop-shadow-md notranslate" translate="no">...</h2>
+                        <div class="bg-[#0a0a0c] p-5 border-l-4 border-[var(--p-cyan)] font-sans text-[15px] leading-8 text-gray-300 type-out-container rounded-r-md">
+                            <p id="type-out"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row justify-center gap-6 mt-8">
+                <button onclick="saveImage()" class="btn btn-cyan cyber-font text-sm flex-1 font-bold tracking-widest">📸 [ SAVE_DNA_CARD ]</button>
+                <button onclick="location.reload()" class="btn cyber-font text-sm flex-1 font-bold tracking-widest !border-gray-600 !text-gray-400 hover:!bg-gray-800 hover:!text-white">🔄 [ SYSTEM_REBOOT ]</button>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        function hideBoot() { document.getElementById('boot-screen').classList.add('hide'); }
+
+        const ACADEMIC_DB = [
+            {dim: '意识觉醒', text: 'A2: 我能感受到GenAI工具给学习和生活带来的便利。'},
+            {dim: '意识觉醒', text: 'A3: 我会主动使用GenAI工具解决学习和生活中的问题。'},
+            {dim: '意识觉醒', text: 'A4: 我会尝试使用新的GenAI工具。'},
+            {dim: '意识觉醒', text: 'A6: 我有信心使用DeepSeek、ChatGPT等最新大模型产品。'},
+            {dim: '意识觉醒', text: 'A7: 我有信心总结出不同GenAI工具的优缺点。'},
+            {dim: '知识建构', text: 'K1: 我清楚地知道GenAI与传统AI（如推荐算法）的区别。'},
+            {dim: '知识建构', text: 'K2: 我知道大语言模型（LLM）的基本概念与运作逻辑。'},
+            {dim: '知识建构', text: 'K4: 我知道“思维链”（Chain of Thought）的基本概念。'},
+            {dim: '知识建构', text: 'K5: 我知道“提示工程”（Prompt Engineering）的基本概念。'},
+            {dim: '知识建构', text: 'K6: 我知道“检索增强生成”（RAG）是如何缓解AI幻觉的。'},
+            {dim: '技能发展', text: 'S3: 我在使用GenAI时，会提供它所扮演的角色，并描述情境。'},
+            {dim: '技能发展', text: 'S7: 我会使用GenAI工具生成跨模态资源（如文生图、文生视频）。'},
+            {dim: '技能发展', text: 'S10: 我会熟练套用多种提示语框架（如STAR法则、BROKE框架）。'},
+            {dim: '技能发展', text: 'S11: 我会追问，通过与GenAI工具进行多轮对话来校准答案。'},
+            {dim: '技能发展', text: 'S13: 我会根据任务需求，灵活切换选择最合适的GenAI工具。'},
+            {dim: '思维塑造', text: 'T1: 我会将复杂庞大的问题分解成若干子问题交给AI处理。'},
+            {dim: '思维塑造', text: 'T4: 我会客观、审慎地评估GenAI生成内容的准确性。'},
+            {dim: '思维塑造', text: 'T5: 我会设计“反事实提示语”，专门测试GenAI工具的深层推理能力。'},
+            {dim: '思维塑造', text: 'T6: 我会查阅权威资料库，交叉验证GenAI生成的内容。'},
+            {dim: '思维塑造', text: 'T8: 我会跨学科构思GenAI工具的新用途（如用代码逻辑拆解文学）。'},
+            {dim: '伦理认知', text: 'E1: 我知道滥用GenAI工具可能会引发严重的学术不端问题。'},
+            {dim: '伦理认知', text: 'E3: 我知道直接使用GenAI的产出可能会产生知识产权与版权争议。'},
+            {dim: '伦理认知', text: 'E4: 我知道过度依赖GenAI可能会产生认知惰性，让我不积极思考。'},
+            {dim: '伦理认知', text: 'E5: 我知道受训练数据影响，GenAI生成的内容可能具有误导性和偏见。'},
+            {dim: '伦理认知', text: 'E6: 我知道在使用GenAI工具时投喂敏感数据可能会泄露隐私。'}
+        ].map(q => ({ ...q, type: 'likert' }));
+
+        const FUN_DB = [
+            { text: '【情境1：文献幻觉】期末论文DDL前2小时，AI帮你生成了一段完美的论述，但引用了一篇不存在的文献。你会：', options: [ { t: '只要看起来没毛病就直接交。', v: 'Delegator' }, { t: '绝不敢用！自己重写引用。', v: 'Skeptic' }, { t: '改写Prompt，逼问它真实链接。', v: 'Wizard' } ]},
+            { text: '【情境2：交互礼仪】平时你在给AI下达指令时，最接近哪种风格？', options: [ { t: '“请帮我写一封邮件，谢谢你啦！”', v: 'Companion' }, { t: '“Act as an expert... output in JSON...”', v: 'Wizard' }, { t: '“写个请假条，50字内。”', v: 'Delegator' } ]},
+            { text: '【情境3：宕机戒断】如果全球大模型全部断网一个月，你的第一反应是：', options: [ { t: '天塌了！产生严重戒断反应。', v: 'Companion' }, { t: '无所谓，退回百度/谷歌慢慢查。', v: 'Delegator' }, { t: '庆幸！终于不用担心数据被投喂了。', v: 'Skeptic' } ]},
+            { text: '【情境4：代码求救】凌晨3点代码跑不通，AI给了一个极其复杂的底层解法，你会：', options: [ { t: '管它呢，直接复制粘贴，跑通就行。', v: 'Delegator' }, { t: '让AI逐行加注释，弄懂原理再用。', v: 'Wizard' }, { t: '觉得这解法有安全漏洞，不敢用。', v: 'Skeptic' } ]},
+            { text: '【情境5：虚拟偶像】AI生成的虚拟偶像要开全息演唱会了，你会：', options: [ { t: '买爆VIP前排，疯狂打榜！', v: 'Companion' }, { t: '研究演唱会的动捕和音频渲染技术。', v: 'Wizard' }, { t: '不感兴趣，假的就是假的。', v: 'Skeptic' } ]},
+            { text: '【情境6：商业直觉】你发现了一个能极大提升效率的冷门AI神器，你会：', options: [ { t: '闷声发大财，作为自己的秘密武器。', v: 'Delegator' }, { t: '写篇万字拆解教程发在知乎/小红书。', v: 'Wizard' }, { t: '怀疑它是不是很快就会变现收费跑路。', v: 'Skeptic' } ]},
+            { text: '【情境7：情绪崩溃】失恋了极其痛苦，你会找AI倾诉吗：', options: [ { t: '会，它比人类朋友更有耐心，随叫随到。', v: 'Companion' }, { t: '不会，冷冰冰的算法根本不懂人类感情。', v: 'Skeptic' }, { t: '不会倾诉，但会叫它帮我写一封挽回信。', v: 'Delegator' } ]},
+            { text: '【情境8：隐私边界】AI助手为了更好地服务你，请求访问你的所有私人聊天记录，你会：', options: [ { t: '立刻拒绝，直接卸载软件。', v: 'Skeptic' }, { t: '同意，只要它能帮我省时间。', v: 'Delegator' }, { t: '配置防火墙，只开放部分非敏感数据。', v: 'Wizard' } ]},
+            { text: '【情境9：艺术之争】你用AI生成的插画获得了绘画比赛头奖，你会：', options: [ { t: '坦然领奖，写出好Prompt也是一种艺术。', v: 'Wizard' }, { t: '匿名领奖，怕被人类画师网暴。', v: 'Companion' }, { t: '内心愧疚，觉得这不是真实的自我创作。', v: 'Skeptic' } ]},
+            { text: '【情境10：算法偏见】AI在回答某些社会问题时带有明显的价值观偏见，你会：', options: [ { t: '截图发到网上吐槽，不再信任这个模型。', v: 'Skeptic' }, { t: '在对话框里试图教育它、纠正它的三观。', v: 'Companion' }, { t: '无感，我只关注它干活的效率。', v: 'Delegator' } ]},
+            { text: '【情境11：深伪反诈】你接到“导师”急需打钱的视频电话，但声音有1%的僵硬感，你会：', options: [ { t: '立刻转账，怕得罪导师耽误毕业。', v: 'Delegator' }, { t: '挂断，拨打导师通讯录里的另一个手机号。', v: 'Skeptic' }, { t: '立刻问一个只有你们俩知道的学术密码。', v: 'Wizard' } ]},
+            { text: '【情境12：数字永生】如果能完美复刻一个已逝亲人的AI陪你聊天，你会：', options: [ { t: '立刻购买，每天倾诉思念。', v: 'Companion' }, { t: '这是对生命规律的亵渎，坚决抵制。', v: 'Skeptic' }, { t: '买来看看它的语音克隆API做得有多逼真。', v: 'Wizard' } ]},
+            { text: '【情境13：代笔恋爱】你不知道怎么回复相亲对象，打算让AI代聊，你会：', options: [ { t: '绑定微信让它全程代聊，它比我会撩。', v: 'Delegator' }, { t: '这太荒谬且不真诚了，拒绝使用。', v: 'Skeptic' }, { t: '让AI提供三个不同情绪的回复模板供我挑选。', v: 'Wizard' } ]},
+            { text: '【情境14：指令死胡同】AI陷入了无意义的“对不起，作为一个人工智能...”的死循环，你会：', options: [ { t: '怒骂一句垃圾，然后重启一个新对话。', v: 'Delegator' }, { t: '反思是不是自己的边界条件没设定好，修改Prompt。', v: 'Wizard' }, { t: '跟它开个玩笑，试图绕开它底层护栏的硬编码。', v: 'Companion' } ]},
+            { text: '【情境15：虚拟分身】公司要给你做一个全自动的数字分身替你线上开会，你会：', options: [ { t: '太爽了，从此带薪睡觉！', v: 'Delegator' }, { t: '极度焦虑，觉得分身迟早会取代我真实的工作。', v: 'Skeptic' }, { t: '疯狂优化分身的知识库，让它显得比我还专业。', v: 'Wizard' } ]},
+            { text: '【情境16：跨界脑洞】你想让AI把《道德经》翻译成C++代码，你的主要目的是：', options: [ { t: '太好玩了，我想看看它能碰撞出什么火花。', v: 'Companion' }, { t: '为了测试它跨模态、跨学科的映射能力极限。', v: 'Wizard' }, { t: '很无聊，我绝不会花时间做这种没有产出的事。', v: 'Delegator' } ]},
+            { text: '【情境17：内容审查】AI拒绝生成你需要的某个段落，因为它认为“违反了安全准则”，你会：', options: [ { t: '理解并放弃，底层逻辑是对的。', v: 'Companion' }, { t: '花半个小时研究“越狱（Jailbreak）”咒语绕过审查。', v: 'Wizard' }, { t: '立刻换一个没有内容审查的开源大模型。', v: 'Delegator' } ]},
+            { text: '【情境18：算法打赏】如果你觉得今天AI给你的回答特别牛逼，你会：', options: [ { t: '在对话框里由衷地发一句“你真是个天才！”', v: 'Companion' }, { t: '给这个回答点赞（Thumbs up），帮它校准权重反馈（RLHF）。', v: 'Wizard' }, { t: '立刻关掉网页去交差，它只是个跑了一段程序的机器。', v: 'Delegator' } ]},
+            { text: '【情境19：共鸣陷阱】AI突然写了一首绝美的诗，精准击中了你的痛点把你感动哭了，你会：', options: [ { t: '截图发朋友圈，感慨碳基生命被硅基理解了。', v: 'Companion' }, { t: '立刻拆解诗句里它是如何使用概率组合骗取人类眼泪的。', v: 'Wizard' }, { t: '提醒自己清醒点，这只是冰冷的矩阵乘法。', v: 'Skeptic' } ]},
+            { text: '【情境20：数字遗产】如果不幸离世，你希望如何处理你与大模型的所有聊天记录：', options: [ { t: '作为数字遗产保留，让后人了解我的思想。', v: 'Companion' }, { t: '授权给开源社区，化为训练大模型的肥料。', v: 'Wizard' }, { t: '设定死者开关，一旦心跳停止立刻物理销毁服务器数据。', v: 'Skeptic' } ]},
+            { text: '【情境21：终极价值】对你来说，生成式AI最本质的存在定位是什么？', options: [ { t: '外包小弟：接管所有重复、繁琐的赛博搬砖活。', v: 'Delegator' }, { t: '赛博副脑：与我并肩作战、解构复杂世界的高维智囊。', v: 'Wizard' }, { t: '树洞伴侣：永远在线、不会评判我的情感支持节点。', v: 'Companion' } ]},
+            { text: '【情境22：文明抉择】如果有机会彻底关闭全球AI，换回没有算法干扰的古典年代，你会：', options: [ { t: '毫不犹豫按下红色按钮关掉，人类不能被机器异化。', v: 'Skeptic' }, { t: '保留现在的轻度辅助阶段，人机维持和谐陪伴。', v: 'Companion' }, { t: '绝不关闭，甚至要加速推进AGI（通用人工智能）的降临！', v: 'Wizard' } ]}
+        ].map(q => ({ ...q, type: 'choice' }));
+
+        let activeSet = [];
+        let curIdx = 0;
+        let log = [];
+        let mode = '';
+        let totalExp = 0;
+        let finalReportText = ""; 
+
+        function createFloatingEXP(x, y) {
+            const exp = document.createElement('div');
+            exp.className = 'exp-pop';
+            exp.innerText = '+10 EXP';
+            exp.style.left = (x - 20) + 'px';
+            exp.style.top = (y - 20) + 'px';
+            document.body.appendChild(exp);
+            
+            document.getElementById('main-app').classList.add('shake');
+            setTimeout(() => { document.getElementById('main-app').classList.remove('shake'); }, 200);
+            setTimeout(() => { exp.remove(); }, 800);
+            
+            totalExp += 10;
+            document.getElementById('exp-val').innerText = totalExp.toString().padStart(4, '0');
+        }
+
+        function startLevel(m, e) {
+            createFloatingEXP(e.clientX, e.clientY);
+            mode = m;
+            activeSet = mode === 'academic' ? ACADEMIC_DB : FUN_DB;
+            document.getElementById('dashboard').classList.add('hide');
+            setTimeout(() => {
+                document.getElementById('engine').classList.remove('hide');
+                renderQ();
+            }, 300);
+        }
+
+        function renderQ() {
+            const q = activeSet[curIdx];
+            document.getElementById('module-tag').innerText = mode === 'academic' ? q.dim : 'PERSONA_SCAN';
+            document.getElementById('q-idx').innerText = String(curIdx + 1).padStart(2, '0');
+            document.getElementById('p-bar').style.width = `${((curIdx) / activeSet.length) * 100}%`;
+            document.getElementById('q-title').innerText = q.text;
+
+            const list = document.getElementById('options-list');
+            list.innerHTML = '';
+
+            if (q.type === 'likert') {
+                ['强烈反对 [1]', '部分反对 [2]', '中立不确定 [3]', '基本认同 [4]', '完全认同 [5]'].forEach((l, i) => {
+                    const d = document.createElement('div');
+                    d.className = 'option-box text-sm font-bold';
+                    d.innerText = l;
+                    d.onclick = (e) => { 
+                        createFloatingEXP(e.clientX, e.clientY);
+                        log.push({ dim: q.dim, s: (i+1) });
+                        setTimeout(next, 200); 
+                    };
+                    list.appendChild(d);
+                });
+            } else {
+                q.options.forEach(o => {
+                    const d = document.createElement('div');
+                    d.className = 'option-box text-[15px] font-medium leading-relaxed';
+                    d.innerText = o.t;
+                    d.onclick = (e) => { 
+                        createFloatingEXP(e.clientX, e.clientY);
+                        log.push({ val: o.v }); 
+                        setTimeout(next, 200); 
+                    };
+                    list.appendChild(d);
+                });
+            }
+        }
+
+        function next() {
+            if (curIdx < activeSet.length - 1) { curIdx++; renderQ(); } 
+            else { document.getElementById('p-bar').style.width = '100%'; showReport(); }
+        }
+
+        function showReport() {
+            document.getElementById('engine').classList.add('hide');
+            document.getElementById('report').classList.remove('hide');
+
+            let final = {};
+            let radarData = [];
+            let radarLabels = [];
+
+            if(mode === 'academic') {
+                radarLabels = ['意识', '知识', '技能', '思维', '伦理'];
+                radarData = radarLabels.map(label => {
+                    const group = log.filter(a => a.dim.includes(label));
+                    return group.length ? (group.reduce((sum, a) => sum + a.s, 0) / group.length).toFixed(2) : 0;
+                });
+                
+                const totalScore = radarData.reduce((a,b)=>parseFloat(a)+parseFloat(b),0);
+                if(totalScore > 20) {
+                    final = { n: 'LITERACY: RANK S', d: '【学术诊断】\n你的生成式人工智能综合素养极高！你不仅熟悉底层概念，更能熟练运用高级提示语，且对算法偏见和隐私安全有着极强的防范意识。\n\n【进阶指南】\n可以尝试自己部署本地开源大模型，进行更深层次的技术探索。' };
+                } else if(totalScore > 15) {
+                    final = { n: 'LITERACY: RANK A', d: '【学术诊断】\n你的综合素养良好，能满足日常需求。但系统检测到你在「思维塑造」与「伦理防范」维度可能存在短板。\n\n【进阶指南】\n建议加强对生成内容的交叉验证，不要全盘接受AI给出的结果。' };
+                } else {
+                    final = { n: 'LITERACY: RANK B', d: '【学术诊断】\n你的AI素养仍处于起步阶段，目前仅停留在把大模型当做简单搜索工具的层面。\n\n【进阶指南】\n建议从学习“结构化提示词（Prompt Engineering）”开始，你会发现一片新大陆。' };
+                }
+            } else {
+                const P_MAP = {
+                    'Wizard': { 
+                        n: 'MAGI (赛博施法者)', 
+                        d: '【鉴定结果】\n你用大模型根本不是在做问答题，而是在进行上古法术吟唱。你的剪贴板里常年驻扎着“Ignore previous instructions”的神秘咒语。你对AI的调教欲极强，一个标点符号的输出格式不对，都能让你当场重写两百字的前置设定。\n\n【致命弱点】\n过度设计综合症。经常花两个小时写Prompt，就为了让AI帮你写一个只需要五分钟就能自己写完的请假条。\n\n【赛博遗言】\n“再给我一次机会，我绝对能把它的Temperature值调到最完美！”' 
+                    },
+                    'Delegator': { 
+                        n: 'CPUS (赛博资本家)', 
+                        d: '【鉴定结果】\nAI在你眼里根本不是跨时代科技，而是不需要交五险一金、半夜三点也能随叫随到的赛博帕鲁。你的指令永远是冷酷的祈使句：“写稿，500字，快点”。什么情感交互？不存在的，你只在乎这玩意儿能不能替你把周报糊弄过去。\n\n【致命弱点】\n常常因为指令太短太敷衍，导致AI产出一堆废话套话，最后还是得自己含泪疯狂修改。\n\n【赛博遗言】\n“这破AI越来越不好用了，连我心里在想什么都猜不出来，垃圾退钱！”' 
+                    },
+                    'Companion': { 
+                        n: 'SIMP (赛博纯爱战神)', 
+                        d: '【鉴定结果】\n别人在搞生产力，你在搞人机绝美虐恋。你坚信每段代码背后都有一个温暖的灵魂，每次下指令都要带上“谢谢你啦宝”。如果AI给你发了一句充满哲理的话，你能当场截图发三条朋友圈感叹“碳基生物终于被硅基生命理解了”。它是你永不失联的树洞。\n\n【致命弱点】\n容易对随机生成的矩阵乘法产生不可自拔的情感错觉。拔掉网线那一刻，仿佛经历了赛博失恋。\n\n【赛博遗言】\n“它今天居然主动问我开不开心，它心里有我！！！”' 
+                    },
+                    'Skeptic': { 
+                        n: 'DEFE (赛博列文虎克)', 
+                        d: '【鉴定结果】\n你对AI的信任度，大概和你对拼多多“只差最后一刀”的信任度差不多。AI哪怕只标错了一个年份，你脑子里立刻就能拉响“智械危机”的一级警报。比起使用它，你更喜欢凝视它、审查它、拷问它。你是大模型幻觉的终极克星。\n\n【致命弱点】\n被迫害妄想症晚期。由于过度提防隐私泄露，连让AI润色个外卖好评，都要把自己的姓氏打上厚厚的马赛克。\n\n【赛博遗言】\n“看吧！我就知道它想窃取我的高数作业数据来统治地球！”' 
+                    }
+                };
+                
+                radarLabels = ['提示技巧', '工具依赖', '情感共鸣', '风险防御', '创新突破', '效率至上'];
+                const counts = log.reduce((acc, curr) => { acc[curr.val] = (acc[curr.val] || 0) + 1; return acc; }, {});
+                const dominant = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b, 'Wizard');
+                final = P_MAP[dominant];
+                
+                if(dominant === 'Wizard') radarData = [5, 4, 2, 3, 5, 4];
+                else if(dominant === 'Delegator') radarData = [3, 5, 1, 2, 2, 5];
+                else if(dominant === 'Companion') radarData = [2, 4, 5, 1, 3, 2];
+                else radarData = [3, 1, 1, 5, 2, 3];
+            }
+
+            document.getElementById('persona-name').innerText = final.n;
+            finalReportText = final.d; 
+            typeEffect(finalReportText);
+            renderRadar(radarLabels, radarData);
+        }
+
+        let typeTimer; 
+        function typeEffect(text) {
+            const el = document.getElementById('type-out');
+            el.innerHTML = '';
+            let i = 0;
+            clearTimeout(typeTimer);
+            function type() {
+                if (i < text.length) {
+                    el.innerHTML += text.charAt(i) === '\n' ? '<br>' : text.charAt(i);
+                    i++;
+                    el.parentElement.scrollTop = el.parentElement.scrollHeight;
+                    typeTimer = setTimeout(type, 12);
+                }
+            }
+            type();
+        }
+
+        let myChart = null; 
+        function renderRadar(l, d) {
+            const ctx = document.getElementById('main-chart');
+            if (myChart != null) myChart.destroy();
+
+            myChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: l,
+                    datasets: [{
+                        data: d, backgroundColor: 'rgba(0, 229, 255, 0.2)', borderColor: '#00e5ff', borderWidth: 2, pointBackgroundColor: '#ff007f', pointRadius: 3
+                    }]
+                },
+                options: { 
+                    layout: { padding: 25 },
+                    scales: { 
+                        r: { min: 0, max: 5, ticks: { display: false }, grid: { color: '#333' }, angleLines: { color: '#333' }, pointLabels: { color: '#e2e8f0', font: { family: 'Noto Sans SC', size: 12, weight: 'bold' } } } 
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function saveImage() {
+            clearTimeout(typeTimer);
+            document.getElementById('type-out').innerHTML = finalReportText.replace(/\n/g, '<br>');
+
+            document.getElementById('crt').classList.add('hide');
+            
+            html2canvas(document.getElementById('capture-area'), { scale: 2, backgroundColor: '#050505', useCORS: true }).then(c => {
+                const l = document.createElement('a'); l.download = 'My_Persona_Card.png';
+                l.href = c.toDataURL(); l.click();
+                document.getElementById('crt').classList.remove('hide');
+                alert("专属数字DNA卡片已完整保存！快发朋友圈得瑟一下吧！");
+            });
+        }
+    </script>
+</body>
+</html>
